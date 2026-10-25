@@ -84,7 +84,7 @@ impl Default for ClientConfig {
             hide_size: 0,
             live_notice: 0,
             online_number: 1,
-            max_concurrency: 4,
+            max_concurrency: 10,
             stagger_delay_ms: 500,
             reconnect: true,
         }

@@ -52,6 +52,10 @@ impl Recorder {
         if self.is_recording(aid) {
             return Err("already recording".into());
         }
+        let cap = self.cfg.max_concurrency.max(1);
+        if self.recording_ids().len() >= cap {
+            return Err(format!("record slots full ({cap})"));
+        }
         let save_root = PathBuf::from(if self.cfg.save_path.is_empty() {
             "./recordings"
         } else {

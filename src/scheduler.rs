@@ -185,11 +185,14 @@ impl Scheduler {
                         if url.is_empty() {
                             return;
                         }
+                        let Some(id) = a.id else { return };
+                        // Already ingesting: skip enter HTTP to keep 10-way CPU down.
+                        if recorder2.is_recording(id) {
+                            return;
+                        }
                         let room = detect(&url);
                         apply_room(&mut a, &room);
                         let _ = store2.upsert_anchor(&mut a);
-                        persist_collects(&store2, &a, &room);
-                        let Some(id) = a.id else { return };
                         if room.live
                             && a.is_auto_record != 0
                             && !recorder2.is_recording(id)
