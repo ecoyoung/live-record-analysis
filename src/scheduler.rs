@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -169,8 +169,10 @@ impl Scheduler {
         let interval = self.cfg.detection_fre.max(2) as u64;
         let max_conc = self.cfg.max_concurrency;
         let stagger = self.cfg.stagger_delay_ms;
+        let cycle = Arc::new(AtomicU64::new(0));
         thread::spawn(move || {
             while !stop.load(Ordering::SeqCst) {
+                let n = cycle.fetch_add(1, Ordering::Relaxed);
                 let anchors = store.list_anchors().unwrap_or_default();
                 let stop2 = stop.clone();
                 let store2 = store.clone();
@@ -187,8 +189,20 @@ impl Scheduler {
                             return;
                         }
                         let Some(id) = a.id else { return };
-                        // Already ingesting: skip enter HTTP to keep 10-way CPU down.
                         if recorder2.is_recording(id) {
+                            // Every 4th tick, re-probe so a finished live does not leak ffmpeg.
+                            if n % 4 != 0 {
+                                return;
+                            }
+                            let room = detect(&url);
+                            apply_room(&mut a, &room);
+                            let _ = store2.upsert_anchor(&mut a);
+                            if !room.live {
+                                recorder2.stop(id);
+                                hub2.stop(id);
+                                a.record_status = RecordStatus::Idle as i64;
+                                let _ = store2.upsert_anchor(&mut a);
+                            }
                             return;
                         }
                         let room = detect(&url);
@@ -249,10 +263,15 @@ impl Scheduler {
     }
 
     pub fn status(&self) -> serde_json::Value {
+        let (used, max) = self.recorder.slots();
         serde_json::json!({
             "detecting": self.detecting.load(Ordering::SeqCst),
             "recording": self.recorder.recording_ids(),
             "barrage": self.hub.active(),
+            "slots_used": used,
+            "slots_max": max,
+            "ffmpeg": self.recorder.has_ffmpeg(),
+            "signer": crate::sign::configured(),
             "max_concurrency": self.cfg.max_concurrency,
             "stagger_delay_ms": self.cfg.stagger_delay_ms,
             "reconnect": self.cfg.reconnect,

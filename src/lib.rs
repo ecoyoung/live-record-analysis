@@ -124,6 +124,7 @@ mod tests {
         let st = app.handle("GET", "/api/system/status", &Default::default(), json!({}));
         assert_eq!(st["code"], 0);
         assert_eq!(st["data"]["max_concurrency"], 10);
+        assert_eq!(st["data"]["slots_max"], 10);
         let s = app.handle(
             "POST",
             "/api/config/session",

@@ -44,6 +44,14 @@ impl Recorder {
         self.sessions.lock().unwrap().keys().copied().collect()
     }
 
+    pub fn has_ffmpeg(&self) -> bool {
+        self.ffmpeg.is_some()
+    }
+
+    pub fn slots(&self) -> (usize, usize) {
+        (self.recording_ids().len(), self.cfg.max_concurrency.max(1))
+    }
+
     pub fn start(&self, anchor: &Anchor, stream_url: &str, live_title: &str) -> Result<AnchorVideo, String> {
         if stream_url.is_empty() {
             return Err("empty stream_url".into());
