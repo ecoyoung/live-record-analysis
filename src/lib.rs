@@ -185,6 +185,15 @@ mod tests {
     }
 
     #[test]
+    fn pick_flv_prefers_hd1() {
+        let m = json!({"FULL_HD1":"http://a.flv","HD1":"http://b.flv","SD1":"http://c.flv"});
+        assert_eq!(crate::detector::pick_flv(&m), "http://b.flv");
+        std::env::set_var("LIVE_QUALITY", "SD1");
+        assert_eq!(crate::detector::pick_flv(&m), "http://c.flv");
+        std::env::remove_var("LIVE_QUALITY");
+    }
+
+    #[test]
     fn ffmpeg_reconnect_flags() {
         let flags = crate::recorder::ffmpeg_input_flags(true);
         assert!(flags.contains(&"-reconnect"));

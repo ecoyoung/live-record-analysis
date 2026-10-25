@@ -178,11 +178,7 @@ fn finish_douyin(parsed: &ParsedLiveUrl, web_rid: String, payload: Value) -> Liv
         .unwrap_or(Value::Null);
     let stream = room.get("stream_url").cloned().unwrap_or(Value::Null);
     let flv_map = stream.get("flv_pull_url").cloned().unwrap_or(Value::Null);
-    let flv = ["FULL_HD1", "HD1", "SD1", "SD2"]
-        .iter()
-        .find_map(|k| flv_map.get(*k).and_then(|v| v.as_str()))
-        .unwrap_or("")
-        .to_string();
+    let flv = pick_flv(&flv_map);
     let hls = stream
         .get("hls_pull_url")
         .and_then(|v| v.as_str())
@@ -234,6 +230,20 @@ fn finish_douyin(parsed: &ParsedLiveUrl, web_rid: String, payload: Value) -> Liv
         wss_url: crate::webcast::find_wss(&payload).unwrap_or_default(),
         qualities: flv_map,
     }
+}
+
+pub fn pick_flv(flv_map: &Value) -> String {
+    let prefer = std::env::var("LIVE_QUALITY").unwrap_or_else(|_| "HD1".into());
+    let order = match prefer.to_ascii_uppercase().as_str() {
+        "FULL_HD1" | "FULL" | "ORIGIN" => ["FULL_HD1", "HD1", "SD1", "SD2"],
+        "SD1" | "SD" => ["SD1", "HD1", "SD2", "FULL_HD1"],
+        _ => ["HD1", "SD1", "FULL_HD1", "SD2"],
+    };
+    order
+        .iter()
+        .find_map(|k| flv_map.get(*k).and_then(|v| v.as_str()))
+        .unwrap_or("")
+        .to_string()
 }
 
 fn detect_kuaishou(parsed: &ParsedLiveUrl) -> LiveRoom {
