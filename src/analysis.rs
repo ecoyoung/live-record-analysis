@@ -1,5 +1,7 @@
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde_json::json;
 
@@ -66,6 +68,9 @@ impl AnalysisPipeline {
         let extra = load_sidecar_danmu(video_path);
         let events: Vec<DanmuEvent> = if danmu.is_empty() { extra } else { danmu.to_vec() };
         job.transcript = transcribe(&wav);
+        if !job.transcript.is_empty() {
+            let _ = std::fs::write(Path::new(video_path).with_extension("asr.txt"), &job.transcript);
+        }
         let stats = crate::webcast::danmu_stats(&events);
         let local = local_report(title, &job.transcript, &stats, &events);
         let llm = self.diagnose(&job.transcript, title, &stats);
@@ -119,8 +124,15 @@ impl AnalysisPipeline {
     }
 }
 
+static ASR_LOCK: Mutex<()> = Mutex::new(());
+
 fn transcribe(wav: &Path) -> String {
+    let _g = ASR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if !wav.exists() {
+        return String::new();
+    }
+    let sz = std::fs::metadata(wav).map(|m| m.len()).unwrap_or(0);
+    if sz < 4096 {
         return String::new();
     }
     let bins = [
@@ -134,71 +146,99 @@ fn transcribe(wav: &Path) -> String {
             continue;
         }
         let txt = wav.with_extension("txt");
-        let st = Command::new(&bin)
-            .args(["-l", "zh", "-f"])
-            .arg(wav)
-            .arg("-otxt")
-            .arg("-of")
-            .arg(wav.with_extension(""))
-            .status();
-        if st.map(|s| s.success()).unwrap_or(false) && txt.exists() {
-            return std::fs::read_to_string(txt).unwrap_or_default();
+        if run_limited(
+            Command::new(&bin)
+                .args(["-t", "2", "-p", "1", "-l", "zh", "-nt", "-f"])
+                .arg(wav)
+                .arg("-otxt")
+                .arg("-of")
+                .arg(wav.with_extension("")),
+            Duration::from_secs(180),
+        ) && txt.exists()
+        {
+            let s = std::fs::read_to_string(txt).unwrap_or_default();
+            if !s.trim().is_empty() {
+                return s;
+            }
         }
-        let out = Command::new(&bin)
-            .args(["--language", "zh", "--model", "base", "--output_format", "txt"])
-            .arg(wav)
-            .output();
-        if let Ok(o) = out {
-            if o.status.success() {
-                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if !s.is_empty() {
-                    return s;
-                }
+        if let Some(s) = run_limited_stdout(
+            Command::new(&bin)
+                .args(["--language", "zh", "--model", "base", "--output_format", "txt", "--threads", "2"])
+                .arg(wav),
+            Duration::from_secs(180),
+        ) {
+            if !s.is_empty() {
+                return s;
             }
         }
     }
-    ffmpeg_silence_sketch(wav)
+    String::new()
 }
 
-fn ffmpeg_silence_sketch(wav: &Path) -> String {
-    let out = Command::new("ffmpeg")
-        .args([
-            "-hide_banner",
-            "-i",
-            &wav.to_string_lossy(),
-            "-af",
-            "silencedetect=noise=-30dB:d=0.6",
-            "-f",
-            "null",
-            "-",
-        ])
-        .output();
-    let Ok(o) = out else {
-        return format!(
-            "[audio] {} bytes",
-            std::fs::metadata(wav).map(|m| m.len()).unwrap_or(0)
-        );
+fn run_limited(cmd: &mut Command, limit: Duration) -> bool {
+    let mut child = match cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
+        Ok(c) => c,
+        Err(_) => return false,
     };
-    let log = String::from_utf8_lossy(&o.stderr);
-    let mut segs = Vec::new();
-    for line in log.lines() {
-        if let Some(i) = line.find("silence_end:") {
-            segs.push(line[i..].trim().to_string());
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(st)) => return st.success(),
+            Ok(None) if start.elapsed() > limit => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(200)),
+            Err(_) => return false,
         }
     }
-    if segs.is_empty() {
-        format!(
-            "[audio] {} bytes (no silence map)",
-            std::fs::metadata(wav).map(|m| m.len()).unwrap_or(0)
-        )
-    } else {
-        format!("[speech-windows]\n{}", segs.into_iter().take(80).collect::<Vec<_>>().join("\n"))
+}
+
+fn run_limited_stdout(cmd: &mut Command, limit: Duration) -> Option<String> {
+    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(st)) if st.success() => {
+                let mut buf = Vec::new();
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = std::io::Read::read_to_end(&mut out, &mut buf);
+                }
+                let s = String::from_utf8_lossy(&buf).trim().to_string();
+                return if s.is_empty() { None } else { Some(s) };
+            }
+            Ok(Some(_)) => return None,
+            Ok(None) if start.elapsed() > limit => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(200)),
+            Err(_) => return None,
+        }
     }
 }
 
 fn extract_audio(video: &str, wav: &Path) {
     let _ = Command::new("ffmpeg")
-        .args(["-y", "-hide_banner", "-loglevel", "error", "-i", video, "-vn", "-ac", "1", "-ar", "16000"])
+        .args([
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-threads",
+            "1",
+            "-i",
+            video,
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-c:a",
+            "pcm_s16le",
+        ])
         .arg(wav)
         .status();
 }
