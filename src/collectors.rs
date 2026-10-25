@@ -10,6 +10,26 @@ const COMPASS_HISTORY: &str =
     "https://buyin.jinritemai.com/compass_api/content_live/author/live_detail/history_live";
 const QIANCHUAN_LIVE: &str = "https://qianchuan.jinritemai.com/ad/api/live/room/stat";
 
+pub fn auth_status() -> Value {
+    let compass = crate::session::named_cookie("compass");
+    let qianchuan = crate::session::named_cookie("qianchuan");
+    json!({
+        "douyin": crate::session::status(),
+        "compass": {
+            "authorized": !compass.is_empty(),
+            "cookie_chars": compass.len(),
+            "login": "https://compass.jinritemai.com",
+            "set": "session --platform compass --set '<cookie>'",
+        },
+        "qianchuan": {
+            "authorized": !qianchuan.is_empty(),
+            "cookie_chars": qianchuan.len(),
+            "login": "https://qianchuan.jinritemai.com",
+            "set": "session --platform qianchuan --set '<cookie>'",
+        }
+    })
+}
+
 pub fn collect_all(anchor: &Anchor, room: Option<&LiveRoom>) -> Vec<CollectResult> {
     vec![
         live_meta(anchor, room),

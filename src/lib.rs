@@ -134,6 +134,9 @@ mod tests {
         assert_eq!(s["data"]["has_ttwid"], true);
         let g = app.handle("GET", "/api/config/session", &Default::default(), json!({}));
         assert_eq!(g["data"]["has_ttwid"], true);
+        let a = app.handle("GET", "/api/config/auth", &Default::default(), json!({}));
+        assert_eq!(a["code"], 0);
+        assert_eq!(a["data"]["compass"]["authorized"], false);
     }
 
     #[test]

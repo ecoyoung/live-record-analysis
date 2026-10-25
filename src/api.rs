@@ -34,6 +34,7 @@ impl App {
                 ok(json!(true))
             }
             ("GET", "/api/config/session") => ok(crate::session::status()),
+            ("GET", "/api/config/auth") => ok(crate::collectors::auth_status()),
             ("POST", "/api/config/session") => {
                 let raw = body
                     .get("cookie")

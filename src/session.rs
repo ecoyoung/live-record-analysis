@@ -214,10 +214,14 @@ pub fn status() -> Value {
 }
 
 pub fn named_cookie(platform: &str) -> String {
-    let env_key = format!("IFUPAN_{}_COOKIE", platform.to_ascii_uppercase());
-    if let Ok(v) = std::env::var(&env_key) {
-        if !v.is_empty() {
-            return v;
+    for key in [
+        format!("LIVE_{}_COOKIE", platform.to_ascii_uppercase()),
+        format!("IFUPAN_{}_COOKIE", platform.to_ascii_uppercase()),
+    ] {
+        if let Ok(v) = std::env::var(&key) {
+            if !v.is_empty() {
+                return v;
+            }
         }
     }
     if platform == "douyin" {
