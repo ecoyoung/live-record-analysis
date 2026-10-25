@@ -2,7 +2,7 @@
 
 **Live Record Analysis — 用 Rust 写的直播录制与分析引擎。**
 
-识别直播间 URL、探测是否开播、按时长切片拉流、折叠实时事件、按需拉取平台看板，再走 ASR + LLM 诊断。全部挂在本地控制面上。
+识别直播间 URL、探测是否开播、最多同时 **10 路** ffmpeg 拷流、折叠实时弹幕、按需拉巨量罗盘 / 千川看板，再走 ASR + LLM。没有 Chromium 界面。
 
 [English](README.md) · [中文](README.zh-CN.md)
 
@@ -137,7 +137,12 @@ cargo run -- watch https://live.douyin.com/<web_rid>
 cargo run -- collect https://live.douyin.com/<web_rid>
 cargo run -- analyze recordings/xxx.flv --title '场次'
 cargo run -- session --platform compass --set '<cookie>'
+cargo run -- session --platform qianchuan --set '<cookie>'
 ```
+
+十路并发默认 `HD1`（`LIVE_QUALITY=FULL_HD1|HD1|SD1`）。ffmpeg `nice 10`、单线程、`-c copy`。弹幕批量写入 SQLite。WSS 签名常驻一个 Node 进程。ASR 同一时刻只跑一个 whisper（`WHISPER_BIN`）。
+
+`GET /api/system/status` 看 `slots_used` / `slots_max`。`GET /api/config/auth` 看巨量 / 千川 cookie 是否已授权。
 
 房间探测对 cookie 敏感。把抖音网页 cookie（至少 `ttwid`）存下来，探测和弹幕共用：
 
@@ -173,7 +178,7 @@ cargo run -- barrage https://live.douyin.com/<web_rid>
 
 ```
 cargo test
-# 15 passed
+# 16 passed
 ```
 
 ## 许可

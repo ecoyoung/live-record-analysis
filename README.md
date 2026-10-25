@@ -2,7 +2,7 @@
 
 **直播录制分析 — a live recording and analysis engine in Rust.**
 
-Classify a room URL, detect whether it is on air, ingest the stream in duration-sliced segments, fold realtime events, optionally pull platform dashboards, then run ASR + LLM diagnosis — all behind a local control plane.
+Classify a room URL, detect whether it is on air, ingest up to **10 rooms** with copy-codec ffmpeg, fold realtime danmaku, optionally pull Compass / Qianchuan dashboards, then run ASR + LLM — no Chromium UI.
 
 [English](README.md) · [中文](README.zh-CN.md)
 
@@ -137,7 +137,12 @@ cargo run -- watch https://live.douyin.com/<web_rid>
 cargo run -- collect https://live.douyin.com/<web_rid>
 cargo run -- analyze recordings/xxx.flv --title '场次'
 cargo run -- session --platform compass --set '<cookie>'
+cargo run -- session --platform qianchuan --set '<cookie>'
 ```
+
+Ten concurrent copies: default `HD1` (`LIVE_QUALITY=FULL_HD1|HD1|SD1`). ffmpeg is `nice 10` / 1 thread / `-c copy`. Danmaku is batched into SQLite. WSS signatures stay in a warm Node process. ASR runs one whisper at a time (`WHISPER_BIN`).
+
+`GET /api/system/status` → `slots_used` / `slots_max`. `GET /api/config/auth` → compass / qianchuan cookie presence.
 
 Room enter is cookie-sensitive. Persist a Douyin web cookie (at least `ttwid`) so probe and barrage share the same jar:
 
@@ -173,7 +178,7 @@ Covered by tests: URL algebra, SQLite roster, local REST, danmaku type map, gzip
 
 ```
 cargo test
-# 15 passed
+# 16 passed
 ```
 
 ## License
