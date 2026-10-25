@@ -189,6 +189,8 @@ mod tests {
         let flags = crate::recorder::ffmpeg_input_flags(true);
         assert!(flags.contains(&"-reconnect"));
         assert!(flags.contains(&"-reconnect_streamed"));
+        assert!(flags.contains(&"-threads"));
+        assert!(!flags.contains(&"-reconnect_at_eof"));
         let off = crate::recorder::ffmpeg_input_flags(false);
         assert!(!off.contains(&"-reconnect"));
     }
@@ -219,6 +221,7 @@ mod tests {
 
     #[test]
     fn collector_metrics_and_xhs_url() {
+        let _g = crate::session::lock_for_test();
         let v = json!({"data":{"gmv": 12.5, "watch_uv": 9, "foo": 1}});
         let m = crate::collectors::pick_metrics(&v);
         assert_eq!(m["gmv"], 12.5);

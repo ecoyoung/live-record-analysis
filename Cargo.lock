@@ -614,6 +614,7 @@ dependencies = [
  "chrono",
  "clap",
  "flate2",
+ "libc",
  "md5",
  "regex",
  "rusqlite",

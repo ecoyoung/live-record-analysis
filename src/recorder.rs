@@ -129,7 +129,20 @@ impl Recorder {
 }
 
 pub fn ffmpeg_input_flags(reconnect: bool) -> Vec<&'static str> {
-    let mut v = vec!["-hide_banner", "-loglevel", "error", "-nostdin"];
+    let mut v = vec![
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-threads",
+        "1",
+        "-probesize",
+        "32768",
+        "-analyzeduration",
+        "0",
+        "-fflags",
+        "+discardcorrupt+nobuffer",
+    ];
     if reconnect {
         v.extend([
             "-reconnect",
@@ -140,8 +153,6 @@ pub fn ffmpeg_input_flags(reconnect: bool) -> Vec<&'static str> {
             "1",
             "-reconnect_delay_max",
             "4",
-            "-reconnect_at_eof",
-            "1",
         ]);
     }
     v
@@ -183,12 +194,22 @@ fn run_record(
         let flags = ffmpeg_input_flags(reconnect);
         let mut cmd = Command::new(&bin);
         cmd.args(&flags)
-            .args(["-y", "-i", &stream, "-c", "copy", "-t"])
+            .args(["-y", "-i", &stream, "-c", "copy", "-map", "0", "-sn", "-t"])
             .arg(remain.as_secs().to_string())
             .arg(&dest)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::nice(10);
+                    Ok(())
+                });
+            }
+        }
         match cmd.spawn() {
             Ok(c) => {
                 *session.child.lock().unwrap() = Some(c);
@@ -210,7 +231,11 @@ fn run_record(
                     if done {
                         break;
                     }
-                    thread::sleep(Duration::from_millis(400));
+                    thread::sleep(Duration::from_millis(800));
+                }
+                let sz = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
+                if sz < 2048 {
+                    break;
                 }
             }
             Err(_) => {

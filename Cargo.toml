@@ -17,5 +17,8 @@ uuid = { version = "1", features = ["v4"] }
 tungstenite = { version = "0.24", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
 flate2 = "1"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3"
