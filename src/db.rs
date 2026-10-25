@@ -427,6 +427,35 @@ impl Store {
         Ok(rows.filter_map(|r| r.ok().flatten()).collect())
     }
 
+    pub fn insert_danmu_batch(&self, rows: &[crate::models::DanmuEvent]) -> rusqlite::Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO danmu (video_id, batch_number, msg_type, content, nick_name, user_id,
+                 event_time, payload) VALUES (?,?,?,?,?,?,?,?)",
+            )?;
+            for ev in rows {
+                let payload = serde_json::to_string(ev).unwrap_or_default();
+                stmt.execute(params![
+                    ev.video_id,
+                    ev.batch_number,
+                    ev.msg_type,
+                    ev.content,
+                    ev.nick_name,
+                    ev.user_id,
+                    ev.event_time,
+                    payload
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn insert_collect(
         &self,
         anchor_id: i64,

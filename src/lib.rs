@@ -4,6 +4,7 @@ pub mod barrage;
 pub mod barrage_ws;
 pub mod collectors;
 pub mod crypto;
+pub mod danmu_sink;
 pub mod db;
 pub mod detector;
 pub mod models;
@@ -256,6 +257,26 @@ mod tests {
         let _ = std::fs::write(&fake, b"FLV");
         let job = crate::analysis::finalize_recording(pipe.store.as_ref(), "vid1", fake.to_str().unwrap(), "t");
         assert!(job.report.contains("chat"));
+        let evs: Vec<crate::models::DanmuEvent> = (0..3)
+            .map(|i| crate::models::DanmuEvent {
+                msg_type: 1,
+                content: format!("c{i}"),
+                nick_name: "n".into(),
+                user_id: "1".into(),
+                gift_name: String::new(),
+                gift_count: 0,
+                online: 0,
+                event_time: "t".into(),
+                msg_id: format!("{i}"),
+                batch_number: "b".into(),
+                video_id: "vidb".into(),
+                method: "WebcastChatMessage".into(),
+                sec_uid: String::new(),
+            })
+            .collect();
+        pipe.store.insert_danmu_batch(&evs).unwrap();
+        assert_eq!(pipe.store.list_danmu_payloads("vidb").unwrap().len(), 3);
+        assert_eq!(crate::pool::peak_inflight(20, 10, 5), 10);
     }
 
     #[test]

@@ -6,6 +6,7 @@ use std::time::Duration;
 use crate::barrage::BarrageHub;
 use crate::barrage_ws::BarrageStart;
 use crate::collectors::collect_all;
+use crate::danmu_sink::DanmuSink;
 use crate::db::Store;
 use crate::detector::detect;
 use crate::models::{now_str, Anchor, ClientConfig, LiveRoom, LiveStatus, RecordStatus};
@@ -275,6 +276,7 @@ fn attach_barrage(
     if room.room_id.is_empty() && !room.wss_url.starts_with("wss://") {
         return;
     }
+    let sink = DanmuSink::spawn(store);
     hub.start(
         BarrageStart {
             anchor_id: id,
@@ -283,19 +285,7 @@ fn attach_barrage(
             video_id: video_id.to_string(),
             batch: batch.to_string(),
         },
-        move |ev| {
-            let payload = serde_json::to_string(&ev).unwrap_or_default();
-            let _ = store.insert_danmu(
-                &ev.video_id,
-                &ev.batch_number,
-                ev.msg_type,
-                &ev.content,
-                &ev.nick_name,
-                &ev.user_id,
-                &ev.event_time,
-                &payload,
-            );
-        },
+        move |ev| sink.push(ev),
     );
 }
 
