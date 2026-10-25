@@ -117,7 +117,7 @@ impl Store {
             conn.execute(
                 "INSERT INTO config (id, serial_number, detection_fre, save_path, live_source,
                  limit_type, limit_value, is_rocord, is_subection, hide_duration, hide_size,
-                 live_notice, online_number) VALUES (1, '2.6.3.1', 10, '', 0, 2, '240', 0, 0, 0, 0, 0, 1)",
+                 live_notice, online_number) VALUES (1, '0.1.0', 15, '', 0, 2, '240', 1, 0, 0, 0, 0, 1)",
                 [],
             )?;
         }

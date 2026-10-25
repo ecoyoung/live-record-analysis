@@ -33,15 +33,19 @@ pub struct BarrageStart {
 pub fn run_loop(req: BarrageStart, stop: Arc<AtomicBool>, sink: Arc<dyn Fn(DanmuEvent) + Send + Sync>) {
     let mut backoff = 1u64;
     let mut host_i = 0usize;
+    let mut signed: Option<String> = None;
     while !stop.load(Ordering::SeqCst) {
         crate::session::ensure();
         let cookie = crate::session::header();
         let url = if req.wss_url.starts_with("wss://") {
             req.wss_url.clone()
+        } else if let Some(u) = signed.clone() {
+            u
         } else if crate::sign::configured() {
             match crate::sign::sign_wss(&req.room_id) {
                 Ok(u) => {
                     eprintln!("barrage signed {}", crate::sign::redact_wss(&u));
+                    signed = Some(u.clone());
                     u
                 }
                 Err(e) => {
@@ -98,6 +102,10 @@ pub fn run_loop(req: BarrageStart, stop: Arc<AtomicBool>, sink: Arc<dyn Fn(Danmu
             }
             Err(e) => {
                 eprintln!("barrage socket err: {e}");
+                if e.contains("200") {
+                    signed = None;
+                    crate::sign::invalidate(&req.room_id);
+                }
                 host_i = host_i.wrapping_add(1);
                 if poll_http(&req, &stop, &sink) {
                     backoff = 1;

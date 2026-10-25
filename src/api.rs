@@ -55,7 +55,7 @@ impl App {
                 Err(e) => err(1, &e),
             },
             ("GET", "/api/config/getClientVersionConfig") => ok(json!({
-                "clientVersion": "2.6.3.1",
+                "clientVersion": "0.1.0",
                 "isVersionSelect": 1,
                 "userType": 0
             })),

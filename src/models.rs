@@ -72,8 +72,8 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            serial_number: "2.6.3.1".into(),
-            detection_fre: 10,
+            serial_number: "0.1.0".into(),
+            detection_fre: 15,
             save_path: String::new(),
             live_source: 0,
             limit_type: 2,

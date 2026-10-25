@@ -1,10 +1,19 @@
 //! Local Douyin WSS signature: MD5 X-MS-STUB + `fp.data` frontierSign (Node).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 const SDK: &str = "1.0.12";
 const UA_VER: &str = "5.0+(Windows+NT+10.0%3b+Win64%3b+x64)+AppleWebKit%2f537.36+(KHTML%2c+like+Gecko)+Chrome%2f126.0.0.0+Safari%2f537.36";
+const CACHE_TTL: Duration = Duration::from_secs(300);
+
+fn cache() -> &'static Mutex<HashMap<String, (Instant, String)>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, (Instant, String)>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub fn configured() -> bool {
     fp_path().is_some() && frontier_script().is_some() && which("node").is_some()
@@ -35,6 +44,13 @@ pub fn sign_wss(room_id: &str) -> Result<String, String> {
     if room_id.is_empty() {
         return Err("room_id required".into());
     }
+    if let Ok(c) = cache().lock() {
+        if let Some((t, url)) = c.get(room_id) {
+            if t.elapsed() < CACHE_TTL {
+                return Ok(url.clone());
+            }
+        }
+    }
     let fp = fp_path().ok_or_else(|| "fp.data not found (copy fp/fp.data to data/fp.data)".to_string())?;
     let script = frontier_script().ok_or_else(|| "scripts/frontier_sign.js not found".to_string())?;
     let node = which("node").ok_or_else(|| "node not on PATH".to_string())?;
@@ -56,7 +72,17 @@ pub fn sign_wss(room_id: &str) -> Result<String, String> {
     if sig.len() < 8 {
         return Err("empty local signature".into());
     }
-    Ok(format!("{}&signature={sig}", unsigned_wss(room_id, &uid)))
+    let url = format!("{}&signature={sig}", unsigned_wss(room_id, &uid));
+    if let Ok(mut c) = cache().lock() {
+        c.insert(room_id.to_string(), (Instant::now(), url.clone()));
+    }
+    Ok(url)
+}
+
+pub fn invalidate(room_id: &str) {
+    if let Ok(mut c) = cache().lock() {
+        c.remove(room_id);
+    }
 }
 
 pub fn redact_wss(url: &str) -> String {
@@ -71,8 +97,10 @@ pub fn redact_wss(url: &str) -> String {
 
 fn fp_path() -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
-    if let Ok(p) = std::env::var("IFUPAN_FP") {
-        cands.push(PathBuf::from(p));
+    for key in ["LIVE_FP", "IFUPAN_FP"] {
+        if let Ok(p) = std::env::var(key) {
+            cands.push(PathBuf::from(p));
+        }
     }
     cands.extend([
         PathBuf::from("data/fp.data"),
