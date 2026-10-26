@@ -104,14 +104,14 @@ fn spawn_daemon() -> Result<SignerProc, String> {
     let fp = fp_path().ok_or_else(|| "fp.data not found".to_string())?;
     let script = frontier_server().ok_or_else(|| "scripts/frontier_sign_server.js not found".to_string())?;
     let node = which("node").ok_or_else(|| "node not on PATH".to_string())?;
-    let mut child = Command::new(node)
-        .arg(&script)
+    let mut cmd = Command::new(node);
+    cmd.arg(&script)
         .arg(&fp)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        .stderr(Stdio::null());
+    crate::cpu::decorate(&mut cmd, crate::cpu::Role::Signer);
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
     let stdin = child.stdin.take().ok_or_else(|| "no stdin".to_string())?;
     let stdout = child.stdout.take().ok_or_else(|| "no stdout".to_string())?;
     Ok(SignerProc {

@@ -30,3 +30,4 @@ Compare against 爱复盘 desktop: keep probe / auto-record / 10-way ingest / AS
 8. Compass / Qianchuan auth status API
 9. Re-probe recording rooms every 4 ticks; slot health
 10. README / this log for 10-way ops
+11. CPU roles: control normal; ffmpeg nice 10; signer nice 5; ASR nice 15

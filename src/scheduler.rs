@@ -276,6 +276,7 @@ impl Scheduler {
             "stagger_delay_ms": self.cfg.stagger_delay_ms,
             "reconnect": self.cfg.reconnect,
             "detection_fre": self.cfg.detection_fre,
+            "cpu": crate::cpu::status(),
         })
     }
 }

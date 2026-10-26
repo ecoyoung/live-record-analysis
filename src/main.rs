@@ -54,6 +54,7 @@ enum Cmd {
 }
 
 fn main() {
+    live_record_analysis::cpu::apply_control_plane();
     let cli = Cli::parse();
     let pipe = Pipeline::default_paths().expect("open db");
     match cli.cmd {

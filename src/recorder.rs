@@ -208,16 +208,7 @@ fn run_record(
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            unsafe {
-                cmd.pre_exec(|| {
-                    libc::nice(10);
-                    Ok(())
-                });
-            }
-        }
+        crate::cpu::decorate(&mut cmd, crate::cpu::Role::Ffmpeg);
         match cmd.spawn() {
             Ok(c) => {
                 *session.child.lock().unwrap() = Some(c);

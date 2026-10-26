@@ -146,27 +146,24 @@ fn transcribe(wav: &Path) -> String {
             continue;
         }
         let txt = wav.with_extension("txt");
-        if run_limited(
-            Command::new(&bin)
-                .args(["-t", "2", "-p", "1", "-l", "zh", "-nt", "-f"])
-                .arg(wav)
-                .arg("-otxt")
-                .arg("-of")
-                .arg(wav.with_extension("")),
-            Duration::from_secs(180),
-        ) && txt.exists()
-        {
+        let mut wcmd = Command::new(&bin);
+        wcmd.args(["-t", "2", "-p", "1", "-l", "zh", "-nt", "-f"])
+            .arg(wav)
+            .arg("-otxt")
+            .arg("-of")
+            .arg(wav.with_extension(""));
+        crate::cpu::decorate(&mut wcmd, crate::cpu::Role::Asr);
+        if run_limited(&mut wcmd, Duration::from_secs(180)) && txt.exists() {
             let s = std::fs::read_to_string(txt).unwrap_or_default();
             if !s.trim().is_empty() {
                 return s;
             }
         }
-        if let Some(s) = run_limited_stdout(
-            Command::new(&bin)
-                .args(["--language", "zh", "--model", "base", "--output_format", "txt", "--threads", "2"])
-                .arg(wav),
-            Duration::from_secs(180),
-        ) {
+        let mut pycmd = Command::new(&bin);
+        pycmd.args(["--language", "zh", "--model", "base", "--output_format", "txt", "--threads", "2"])
+            .arg(wav);
+        crate::cpu::decorate(&mut pycmd, crate::cpu::Role::Asr);
+        if let Some(s) = run_limited_stdout(&mut pycmd, Duration::from_secs(180)) {
             if !s.is_empty() {
                 return s;
             }
@@ -221,26 +218,27 @@ fn run_limited_stdout(cmd: &mut Command, limit: Duration) -> Option<String> {
 }
 
 fn extract_audio(video: &str, wav: &Path) {
-    let _ = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-threads",
-            "1",
-            "-i",
-            video,
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-c:a",
-            "pcm_s16le",
-        ])
-        .arg(wav)
-        .status();
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args([
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-threads",
+        "1",
+        "-i",
+        video,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "pcm_s16le",
+    ])
+    .arg(wav);
+    crate::cpu::decorate(&mut cmd, crate::cpu::Role::Asr);
+    let _ = cmd.status();
 }
 
 fn load_sidecar_danmu(video_path: &str) -> Vec<DanmuEvent> {

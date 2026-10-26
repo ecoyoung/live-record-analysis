@@ -3,6 +3,7 @@ pub mod api;
 pub mod barrage;
 pub mod barrage_ws;
 pub mod collectors;
+pub mod cpu;
 pub mod crypto;
 pub mod danmu_sink;
 pub mod db;
@@ -187,6 +188,20 @@ mod tests {
             crate::sign::unsigned_wss("1", "2")
         );
         assert!(!crate::sign::redact_wss(&u).contains("abc"));
+    }
+
+    #[test]
+    fn cpu_roles_leave_workers() {
+        let n = crate::cpu::nproc();
+        let w = crate::cpu::worker_cores();
+        assert!(!w.is_empty());
+        assert!(w.len() <= n);
+        if n >= 8 {
+            assert_eq!(crate::cpu::reserved_cores(), 2);
+            assert_eq!(w[0], 2);
+        }
+        let st = crate::cpu::status();
+        assert_eq!(st["nproc"], n);
     }
 
     #[test]
