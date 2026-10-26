@@ -190,6 +190,16 @@ mod tests {
     }
 
     #[test]
+    fn wss_needs_signature() {
+        assert!(!crate::barrage_ws::has_signature(
+            "wss://webcast5-ws-web-lf.douyin.com/webcast/im/push/v2/?room_id=1"
+        ));
+        assert!(crate::barrage_ws::has_signature(
+            "wss://webcast5-ws-web-lf.douyin.com/webcast/im/push/v2/?room_id=1&signature=abcdef12"
+        ));
+    }
+
+    #[test]
     fn pick_flv_prefers_hd1() {
         let m = json!({"FULL_HD1":"http://a.flv","HD1":"http://b.flv","SD1":"http://c.flv"});
         assert_eq!(crate::detector::pick_flv(&m), "http://b.flv");

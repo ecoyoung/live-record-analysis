@@ -15,6 +15,7 @@ use crate::webcast::{encode_ack, encode_heartbeat, events_from_bytes};
 
 const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
+#[allow(dead_code)]
 const HOSTS: &[&str] = &[
     "webcast5-ws-web-lf.douyin.com",
     "webcast5-ws-web-lq.douyin.com",
@@ -37,7 +38,7 @@ pub fn run_loop(req: BarrageStart, stop: Arc<AtomicBool>, sink: Arc<dyn Fn(Danmu
     while !stop.load(Ordering::SeqCst) {
         crate::session::ensure();
         let cookie = crate::session::header();
-        let url = if req.wss_url.starts_with("wss://") {
+        let url = if has_signature(&req.wss_url) {
             req.wss_url.clone()
         } else if let Some(u) = signed.clone() {
             u
@@ -50,11 +51,18 @@ pub fn run_loop(req: BarrageStart, stop: Arc<AtomicBool>, sink: Arc<dyn Fn(Danmu
                 }
                 Err(e) => {
                     eprintln!("barrage sign err: {e}");
-                    build_wss(HOSTS[host_i % HOSTS.len()], &req.room_id)
+                    thread::sleep(Duration::from_secs(backoff.max(2)));
+                    backoff = (backoff * 2).min(30);
+                    continue;
                 }
             }
         } else {
-            build_wss(HOSTS[host_i % HOSTS.len()], &req.room_id)
+            eprintln!(
+                "barrage need node + data/fp.data (or LIVE_FP); unsigned WSS handshake is HTTP 200 not 101"
+            );
+            thread::sleep(Duration::from_secs(backoff.max(3)));
+            backoff = (backoff * 2).min(30);
+            continue;
         };
         eprintln!("barrage connecting {}", crate::sign::redact_wss(&url));
         match open_socket(&url, &cookie) {
@@ -103,10 +111,11 @@ pub fn run_loop(req: BarrageStart, stop: Arc<AtomicBool>, sink: Arc<dyn Fn(Danmu
             Err(e) => {
                 eprintln!("barrage socket err: {e}");
                 if e.contains("200") {
+                    eprintln!("barrage handshake HTTP 200 = signature rejected or missing");
                     signed = None;
                     crate::sign::invalidate(&req.room_id);
+                    host_i = host_i.wrapping_add(1);
                 }
-                host_i = host_i.wrapping_add(1);
                 if poll_http(&req, &stop, &sink) {
                     backoff = 1;
                     continue;
@@ -121,6 +130,11 @@ pub fn run_loop(req: BarrageStart, stop: Arc<AtomicBool>, sink: Arc<dyn Fn(Danmu
     }
 }
 
+pub(crate) fn has_signature(url: &str) -> bool {
+    url.starts_with("wss://") && url.contains("signature=")
+}
+
+#[allow(dead_code)]
 fn build_wss(host: &str, room_id: &str) -> String {
     format!(
         "wss://{host}/webcast/im/push/v2/?app_name=douyin_web&version_code=180800&webcast_sdk_version=1.0.14-beta.0&update_version_code=1.0.14-beta.0&compress=gzip&device_platform=web&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=Win32&browser_name=Mozilla&browser_online=true&tz_name=Asia/Shanghai&aid=6383&live_id=1&heartbeatDuration=0&room_id={room_id}"
@@ -150,6 +164,10 @@ fn open_socket(
             .parse()
             .map_err(|e: tungstenite::http::header::InvalidHeaderValue| e.to_string())?,
     );
+    let cookie = cookie
+        .chars()
+        .filter(|c| *c == '\t' || (*c >= ' ' && *c <= '~'))
+        .collect::<String>();
     if !cookie.is_empty() {
         headers.insert(
             COOKIE,
